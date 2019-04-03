@@ -1,0 +1,23 @@
+# Scrape for players.csv
+import numpy as np
+import pandas as pd
+
+url1 = 'https://www.basketball-reference.com/leagues/NBA_'
+url2 = '_per_game.html'
+year = [str(year) for year in range(2006, 2016)]
+print(year)
+
+df = []
+players = []
+file_name = 'Player.csv'
+
+for y in year:
+url = url1 + y + url2
+df = pd.read_html(url, index_col = 0)[0]
+df['year'] = int(y) + 1
+print(df.head(5))
+players.append(df)
+p = pd.concat(players)
+p.drop('Rk', axis = 0, inplace = True)
+
+p.to_csv(file_name, sep=',', encoding='utf-8')
