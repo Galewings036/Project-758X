@@ -1,0 +1,157 @@
+import pandas as pd
+Import numpy as pd
+from pandas import Series, DataFrame
+
+players = pd.read_csv("Player.csv", index_col = 0)
+df = pd.read_csv("free_throws.csv")
+
+df[['team1', 'team2']]=df['game'].str.split(' - ', expand=True)
+df[['end1', 'end2']]=df['end_result'].str.split(' - ', expand=True)
+df[['score1', 'score2']]=df['score'].str.split(' - ', expand=True)
+
+df.drop(['game', 'end_result', 'score'], axis = 1, inplace = True)
+
+df['end1'] = df['end1'].astype(int)
+df['end2'] = df['end2'].astype(int)
+df['score1'] = df['score1'].astype(int)
+df['score2'] = df['score2'].astype(int)
+df['period'] = df['period'].astype(int)
+df['game_id'] = df['game_id'].astype(int)
+df['game_id'] = df['game_id'].astype(str)
+
+
+search = ~(df['play'].str.contains('technical free throw') | df['play'].str.contains('\d of \d'))
+df.drop(df[search].index, axis = 0, inplace = True)
+
+df['throw_type'] = df['play'].str.extract('(\d of \d)')
+df['throw_type'] = df['throw_type'].fillna('1 of 1')
+
+df.drop('play', axis = 1, inplace = True)
+
+judge = df[(df['team1'] == 'WEST ') | (df['team1'] == 'EAST ')].index
+df.drop(judge, axis = 0, inplace = True)
+
+#Transform the countdown time into real time
+df['minute'] = df['time'].apply(lambda x: int(x[:-3]))
+df['sec'] = df['time'].apply(lambda x: int(x[-2:]))
+df['sec'] = 60 - df['sec']
+df['period_min']=(df['period']-1)*12
+df['minute'] = 11-df['minute']+df['period_min']
+df.drop(['period_min'], axis = 1, inplace = True)
+
+df.loc[df['sec'] == 60, 'minute'] = df.loc[df['sec'] == 60, 'minute'] + 1
+df.loc[df['sec'] == 60, 'sec'] = 0
+
+
+
+
+
+
+###### Merge unmatched players and teams names in datasets
+def change(x, dic):
+    if x in dic.keys():
+        x = dic[x]
+    return x
+
+p1 = players['Player'].unique()
+p2 = df['player'].unique()
+noname = []
+for i in p2:
+    if i in p1:
+        pass
+    else:
+        noname.append(i)
+noname = pd.Series(noname)
+noname.sort_values()
+
+namedic = {name:[] for name in noname}
+
+namedic = {'Amare Stoudemire': "Amar'e Stoudemire",
+ 'Ron Artest': 'Metta World Peace',
+ 'Nene': 'Nene Hilario',
+ 'DJ Mbenga': 'Didier Ilunga-Mbenga',
+ 'Tarance Kinsey': 'Tarence Kinsey',
+ 'Louis Williams': 'Lou Williams',
+ 'John Lucas': 'John Lucas III',
+ 'Michael Sweetney': 'Mike Sweetney',
+ 'Jose Juan': 'J.J. Barea',
+ 'Slava Medvedenko': 'Stanislav Medvedenko',
+ 'Louis Amundson': 'Lou Amundson',
+ 'Jose Barea': 'J.J. Barea',
+ 'Juan Carlos': 'Juan Carlos Navarro',
+ 'Cheick Samb': 'Cheikh Samb',
+ 'Cj Watson': 'C.J. Watson',
+ 'Luc Mbah': 'Luc Mbah a Moute',
+ 'Luc Richard': 'Luc Mbah a Moute',
+ 'Bill Walker': 'Henry Walker',
+ 'D.J. Mbenga': 'Didier Ilunga-Mbenga',
+ 'Wes Matthews': 'Wesley Matthews',
+ 'Daniel Green': 'Danny Green',
+ 'Jeff Pendergraph': 'Jeff Ayres',
+ 'Patrick Mills': 'Patty Mills',
+ 'B.J. Mullens': 'Byron Mullens',
+ 'Ishmael Smith': 'Ish Smith',
+ 'Hamady Ndiaye': "Hamady N'Diaye",
+ 'Pooh Jeter': 'Eugene Jeter',
+ 'Metta World': 'Metta World Peace',
+ 'Marshon Brooks': 'MarShon Brooks',
+ 'W Russell': 'Walker Russell',
+ 'Nando de': 'Nando De Colo',
+ 'Moe Harkless': 'Maurice Harkless',
+ 'Slava Kravtsov': 'Viacheslav Kravtsov',
+ 'Jeff Taylor': 'Jeffery Taylor',
+ 'C.J. McCollum': 'CJ McCollum',
+ 'James Michael': 'James Michael McAdoo',
+ 'Walter Tavares': 'Edy Tavares',
+ 'JJ Hickson': 'J.J. Hickson'}
+
+df['player'] = df['player'].apply(lambda x: change(x, namedic))
+
+p1 = players['Tm'].unique()
+p2 = df['team1'].unique()
+noteam = []
+for i in p1:
+    if i in p2:
+        pass
+    else:
+        noteam.append(i)
+noteam = pd.Series(noteam)
+noteam.sort_values()
+
+teamdic = {name:'' for name in noteam}
+
+teamdic = {'NOK': 'NO',
+ 'WAS': 'WSH',
+ 'NYK': 'NY',
+ 'PHO': 'PHX',
+ 'SAS': 'SA',
+ 'GSW': 'GS',
+ 'UTA': 'UTAH',
+ 'NJN': 'NJ',
+ 'NOH': 'NO',
+ 'BRK': 'BKN',
+ 'NOP': 'NO',
+ 'CHO': 'CHA'}
+
+players['Tm'] = players['Tm'].apply(lambda x: change(x, teamdic))
+
+#### Change season to year of the season starts
+df['season'] = df['season'].str.slice(0,4).astype(int)
+df['season'].unique()
+
+#### Match players with team he plays for
+
+def matchteam(row):
+    tm = list(players[(players['Player'] == row['player']) & (players['Year'] == row['season'])]['Tm'])
+    if row['team1'] in tm:
+        return row['team1']
+    elif row['team2'] in tm:
+        return row['team2']
+    else:
+        return('Unmatched')
+
+df['team'] = df.apply(matchteam, axis = 1) ## SLOW
+# Manipulate some exceptions
+df.loc[(df['team'] == 'Unmatched') & (df['player'] == 'Scott Machado'), ['team']] = 'GS'
+df.loc[(df['team'] == 'Unmatched') & (df['player'] == 'Dorell Wright'), ['team']] = 'MIA'
+
